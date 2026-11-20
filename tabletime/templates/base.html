@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}{% endblock %} · TableTime</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  {% block head %}{% endblock %}
 </head>
 <body>
   <header class="site-header">
@@ -12,15 +13,25 @@
     <nav>
       {% if g.user %}
         <span class="who">{{ g.user['name'] }} <span class="role">{{ g.user['role'] }}</span></span>
-        <form method="post" action="{{ url_for('auth.logout') }}" class="inline">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <button type="submit" class="link">Log out</button>
-        </form>
-      {% else %}
-        <a href="{{ url_for('auth.login') }}">Log in</a>
       {% endif %}
     </nav>
   </header>
+
+  {% if acting_as_users %}
+  {# Development only. The shared login change removes this form. #}
+  <form method="post" action="{{ url_for('dev.act_as') }}" class="acting-as">
+    <label for="acting-as-user">Acting as</label>
+    <select id="acting-as-user" name="user_id">
+      <option value="">(nobody)</option>
+      {% for u in acting_as_users %}
+        <option value="{{ u['id'] }}" {% if g.user and g.user['id'] == u['id'] %}selected{% endif %}>
+          {{ u['name'] }} ({{ u['role'] }}{% if u['team'] %}, {{ u['team'] }}{% endif %})
+        </option>
+      {% endfor %}
+    </select>
+    <button type="submit">Switch</button>
+  </form>
+  {% endif %}
 
   <main>
     {% for category, message in get_flashed_messages(with_categories=true) %}

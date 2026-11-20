@@ -1,0 +1,8 @@
+-- Tables for the scan part of the app. `flask --app tabletime init-db` runs this
+-- file after the shared tabletime/schema.sql, so these tables can reference
+-- teams, users and study_sessions.
+--
+-- Drop each table before creating it, so init-db can run more than once:
+--
+--   DROP TABLE IF EXISTS example;
+--   CREATE TABLE example ( ... );

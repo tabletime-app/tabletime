@@ -4,14 +4,22 @@ Every request gets its own SQLite connection, stored on Flask's `g` object
 and closed when the request ends.
 
 Timestamps are stored as UTC text in ISO 8601 form, for example
-"2026-09-14T19:05:00Z". Convert to local time only when displaying.
+"2027-02-15T23:05:00Z". Convert to local time only when displaying
+(see tabletime/times.py).
 """
+import random
 import sqlite3
+from datetime import datetime, time, timedelta, timezone
 
 import click
 from flask import current_app, g
 from flask.cli import with_appcontext
 from werkzeug.security import generate_password_hash
+
+from .times import local_zone, to_text
+
+# The shared schema runs first, then each part's schema in this order.
+PART_SCHEMAS = ["scan/schema.sql", "athlete/schema.sql", "coach/schema.sql", "admin/schema.sql"]
 
 
 def get_db():
@@ -29,18 +37,29 @@ def close_db(e=None):
 
 
 def init_db():
+    """Delete all data and create every table, shared tables first."""
     db = get_db()
-    with current_app.open_resource("schema.sql") as f:
-        db.executescript(f.read().decode("utf8"))
+    # Foreign keys are switched off while tables are dropped and re-created, so
+    # the order of the DROP statements across files doesn't matter.
+    db.execute("PRAGMA foreign_keys = OFF")
+    for path in ["schema.sql", *PART_SCHEMAS]:
+        with current_app.open_resource(path) as f:
+            db.executescript(f.read().decode("utf8"))
+    db.execute("PRAGMA foreign_keys = ON")
 
 
-def add_user(db, *, email, name, password, role, student_id=None, team_id=None):
-    """Insert a user and return the new id. Raises sqlite3.IntegrityError on duplicates."""
+def add_user(db, *, email, name, role, password=None, password_hash=None,
+             student_id=None, team_id=None):
+    """Insert a user and return the new id. Raises sqlite3.IntegrityError on duplicates.
+
+    Pass either the password, which is hashed here, or a hash made earlier.
+    """
+    if password_hash is None:
+        password_hash = generate_password_hash(password)
     cur = db.execute(
         "INSERT INTO users (email, name, password_hash, role, student_id, team_id)"
         " VALUES (?, ?, ?, ?, ?, ?)",
-        (email.strip().lower(), name.strip(), generate_password_hash(password),
-         role, student_id, team_id),
+        (email.strip().lower(), name.strip(), password_hash, role, student_id, team_id),
     )
     return cur.lastrowid
 
@@ -53,54 +72,87 @@ def init_db_command():
     click.echo("Initialized the database.")
 
 
-@click.command("create-admin")
-@with_appcontext
-@click.argument("email")
-@click.option("--name", default="Administrator", help="Display name.")
-@click.password_option()
-def create_admin_command(email, name, password):
-    """Create an admin account."""
-    db = get_db()
-    try:
-        add_user(db, email=email, name=name, password=password, role="admin")
-        db.commit()
-    except sqlite3.IntegrityError:
-        raise click.ClickException(f"A user with email {email} already exists.")
-    click.echo(f"Created admin {email}.")
+TEAMS = ["Soccer", "Basketball", "Swimming", "Track"]
+ATHLETES_PER_TEAM = 8
+SEED_WEEKS = 10
+# Hours per week each athlete aims for. Most land near a typical 6-hour
+# minimum; a few are well above or well below it, so reports have variety.
+WEEKLY_HOURS = [2, 4, 5, 6, 6, 7, 8, 10]
+
+
+def seed_sessions(db, athlete_ids, now=None, rng=None):
+    """Add SEED_WEEKS weeks of fake study sessions, plus a few open ones right now.
+
+    Sessions fall on Sunday to Thursday evenings between 6 and 10 pm local
+    time and are stored in UTC. Returns the number of sessions added.
+    """
+    rng = rng or random.Random(253)
+    zone = local_zone()
+    now = now or datetime.now(timezone.utc)
+    today = now.astimezone(zone).date()
+    this_monday = today - timedelta(days=today.weekday())
+    first_monday = this_monday - timedelta(weeks=SEED_WEEKS)
+
+    rows = []
+    for user_id in athlete_ids:
+        target = rng.choice(WEEKLY_HOURS)
+        week = first_monday
+        while week < this_monday:
+            goal_minutes = max(0, rng.gauss(target * 60, 45))
+            evenings = [week + timedelta(days=d) for d in (0, 1, 2, 3, 6)]
+            rng.shuffle(evenings)
+            done = 0
+            for day in evenings:
+                if done >= goal_minutes:
+                    break
+                length = rng.choice([45, 60, 75, 90, 120, 150])
+                start = datetime.combine(day, time(18, 0), zone) + timedelta(
+                    minutes=rng.randrange(0, 120, 5))
+                end = start + timedelta(minutes=length)
+                rows.append((user_id, to_text(start), to_text(end)))
+                done += length
+            week += timedelta(weeks=1)
+
+    # A few athletes are at the table right now, with sessions still open.
+    for user_id in rng.sample(athlete_ids, k=min(3, len(athlete_ids))):
+        start = now - timedelta(minutes=rng.randrange(10, 90, 5))
+        rows.append((user_id, to_text(start), None))
+
+    db.executemany(
+        "INSERT INTO study_sessions (user_id, clock_in, clock_out) VALUES (?, ?, ?)", rows)
+    return len(rows)
 
 
 @click.command("seed")
 @with_appcontext
 def seed_command():
-    """Add fake teams and users for development. Every password is "password"."""
+    """Add fake teams, users and study sessions. Every password is "password"."""
     db = get_db()
-    teams = ["Soccer", "Basketball", "Swimming"]
-    for team in teams:
-        db.execute("INSERT OR IGNORE INTO teams (name) VALUES (?)", (team,))
-    team_ids = {row["name"]: row["id"] for row in db.execute("SELECT id, name FROM teams")}
+    if db.execute("SELECT COUNT(*) FROM users").fetchone()[0]:
+        click.echo("The database already has users. Run init-db first to start over.")
+        return
 
-    people = [("admin@example.edu", "Ada Admin", "admin", None, None)]
-    for i, team in enumerate(teams, start=1):
-        people.append((f"coach{i}@example.edu", f"{team} Coach", "coach", None, team_ids[team]))
-        for j in range(1, 6):
+    # Hashing is slow on purpose, so hash the shared fake password once.
+    hashed = generate_password_hash("password")
+    add_user(db, email="admin@example.edu", name="Ada Admin", password_hash=hashed, role="admin")
+    athlete_ids = []
+    for i, team in enumerate(TEAMS, start=1):
+        team_id = db.execute("INSERT INTO teams (name) VALUES (?)", (team,)).lastrowid
+        add_user(db, email=f"coach{i}@example.edu", name=f"{team} Coach", password_hash=hashed,
+                 role="coach", team_id=team_id)
+        for j in range(1, ATHLETES_PER_TEAM + 1):
             n = i * 10 + j
-            people.append((f"athlete{n}@example.edu", f"Athlete {n}", "athlete",
-                           f"10000{n}", team_ids[team]))
+            athlete_ids.append(add_user(
+                db, email=f"athlete{n}@example.edu", name=f"Athlete {n}", password_hash=hashed,
+                role="athlete", student_id=f"10000{n}", team_id=team_id))
 
-    added = 0
-    for email, name, role, student_id, team_id in people:
-        try:
-            add_user(db, email=email, name=name, password="password", role=role,
-                     student_id=student_id, team_id=team_id)
-            added += 1
-        except sqlite3.IntegrityError:
-            pass  # already seeded
+    sessions = seed_sessions(db, athlete_ids)
     db.commit()
-    click.echo(f"Added {added} users. Log in as admin@example.edu / password.")
+    click.echo(f"Added {len(TEAMS)} teams, {len(TEAMS) + 1 + len(athlete_ids)} users "
+               f"and {sessions} study sessions.")
 
 
 def init_app(app):
     app.teardown_appcontext(close_db)
     app.cli.add_command(init_db_command)
-    app.cli.add_command(create_admin_command)
     app.cli.add_command(seed_command)

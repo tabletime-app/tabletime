@@ -73,3 +73,17 @@ button.link {
 
 table { width: 100%; border-collapse: collapse; }
 th, td { text-align: left; padding: 0.5rem; border-bottom: 1px solid var(--line); }
+
+/* The development-only "Acting as" menu and links. */
+.acting-as {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  background: #fff8e1;
+  border-bottom: 1px solid #e6c56b;
+}
+.acting-as label { margin: 0; }
+.acting-as button { margin: 0; }
+.dev-only { background: #fff8e1; padding: 0.5rem 0.75rem; border-radius: 6px; }

@@ -2,7 +2,7 @@ import sqlite3
 
 import pytest
 
-from tabletime.db import get_db
+from tabletime.db import get_db, init_db
 
 
 def test_connection_is_reused_within_a_request(app):
@@ -41,6 +41,16 @@ def test_passwords_are_stored_hashed(app):
         assert row["password_hash"].startswith(("scrypt:", "pbkdf2:"))
 
 
+def test_init_db_runs_again_over_existing_data(app):
+    with app.app_context():
+        db = get_db()
+        db.execute("INSERT INTO study_sessions (user_id, clock_in) VALUES (3, '2027-02-15T23:00:00Z')")
+        db.commit()
+        init_db()
+        assert db.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 0
+        assert db.execute("PRAGMA foreign_keys").fetchone()[0] == 1
+
+
 def test_init_db_command(runner, monkeypatch):
     called = []
     monkeypatch.setattr("tabletime.db.init_db", lambda: called.append(True))
@@ -49,18 +59,19 @@ def test_init_db_command(runner, monkeypatch):
     assert called
 
 
-def test_seed_command_can_run_twice(runner, app):
-    first = runner.invoke(args=["seed"])
-    second = runner.invoke(args=["seed"])
-    assert first.exit_code == 0 and second.exit_code == 0
-    assert "Added 0 users" in second.output
+def test_an_athlete_cannot_have_two_open_sessions(app):
     with app.app_context():
-        athletes = get_db().execute(
-            "SELECT COUNT(*) FROM users WHERE role = 'athlete'").fetchone()[0]
-        assert athletes == 2 + 15  # two from conftest, five per seeded team
+        db = get_db()
+        db.execute("INSERT INTO study_sessions (user_id, clock_in) VALUES (3, '2027-02-15T23:00:00Z')")
+        with pytest.raises(sqlite3.IntegrityError):
+            db.execute("INSERT INTO study_sessions (user_id, clock_in) VALUES (3, '2027-02-15T23:10:00Z')")
+        # A different athlete can be open at the same time.
+        db.execute("INSERT INTO study_sessions (user_id, clock_in) VALUES (4, '2027-02-15T23:10:00Z')")
 
 
-def test_create_admin_rejects_duplicates(runner):
-    result = runner.invoke(args=["create-admin", "admin@example.edu"], input="pw\npw\n")
-    assert result.exit_code != 0
-    assert "already exists" in result.output
+def test_clock_out_must_come_after_clock_in(app):
+    with app.app_context():
+        with pytest.raises(sqlite3.IntegrityError):
+            get_db().execute(
+                "INSERT INTO study_sessions (user_id, clock_in, clock_out)"
+                " VALUES (3, '2027-02-15T23:00:00Z', '2027-02-15T22:00:00Z')")

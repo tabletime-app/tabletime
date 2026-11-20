@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}Admin{% endblock %}
+{% block content %}
+<h1>Administration</h1>
+<ul>
+  <li><a href="{{ url_for('scan.display') }}">Study table display</a></li>
+</ul>
+<p class="todo">Admin pages: teams, coach accounts and open hours go here. Your Spec 1 mockup is the starting point.</p>
+{% endblock %}

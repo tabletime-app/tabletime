@@ -1,12 +1,15 @@
 # TableTime
 
 TableTime tracks study table hours for student athletes. Athletes clock in
-and out by scanning a QR code that changes every few seconds, coaches see who
-met the team's weekly minimum, and admins manage teams, schedules, and reports.
+and out by scanning a QR code shown on a screen at the study table, coaches
+see which athletes met their team's weekly minimum, and admins manage teams
+and the study table's open hours.
 
-It is built with Flask, SQLite, and plain HTML, CSS, and JavaScript, and it
-doubles as the semester project for CS 253. The `main` branch is the starter
-code; students build the features week by week.
+It is built with Flask, SQLite, and plain HTML, CSS, and JavaScript. It is
+also the class project for CS 253 at Illinois Wesleyan University, where
+each project group builds the app from this starting code. The `main` branch
+is that starting code: the structure, the shared tables, fake data, and a
+helper for signed QR codes, with the features themselves left to build.
 
 ## Get it running
 
@@ -17,15 +20,15 @@ python -m venv .venv
 source .venv/bin/activate          # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 
-flask --app tabletime init-db     # create an empty database
-flask --app tabletime seed        # add fake teams, coaches, and athletes
+flask --app tabletime init-db     # create empty tables
+flask --app tabletime seed        # add fake teams, coaches, athletes and study sessions
 flask --app tabletime run --debug
 ```
 
-Open http://127.0.0.1:5000 and log in as `admin@example.edu`, `coach1@example.edu`,
-or `athlete11@example.edu`. Every seeded password is `password`.
-
-To make a real admin account: `flask --app tabletime create-admin you@example.edu`
+Open http://127.0.0.1:5000. There is no login page yet. Instead, pick a user
+from the **Acting as** menu at the top of the page, and TableTime treats you
+as that user. The seed adds an admin, a coach and 8 athletes for each of four
+teams, and about ten weeks of study sessions, so every page has data to show.
 
 ## Run the tests
 
@@ -33,32 +36,58 @@ To make a real admin account: `flask --app tabletime create-admin you@example.ed
 pytest
 ```
 
-Tests for features you haven't built yet are skipped. Each skipped file names
-its week, for example `tests/test_week02_register.py`. Delete its `pytestmark`
-line when you start that feature, and the tests tell you what's left.
+Every test must pass before a pull request is merged. Add tests for each
+route you write, including at least one test of something that should be
+refused.
 
-## What's in the starter
+## How the code is organized
+
+The app has four parts, and each has its own folder with its routes
+(a Flask blueprint), its templates and its tables:
+
+| Folder | Part | What it covers |
+| --- | --- | --- |
+| `tabletime/scan/` | Display and scan | The QR display page, the scan route, clocking in and out |
+| `tabletime/athlete/` | Athlete pages | An athlete's history and progress toward this week's minimum |
+| `tabletime/coach/` | Coach pages | The roster against the minimum, setting minimums, corrections with an audit trail |
+| `tabletime/admin/` | Admin pages | Teams, coach accounts, open hours |
+
+Each part's tables go in its own `schema.sql`. Shared code that every part
+uses is at the top level:
 
 | Path | What it does |
 | --- | --- |
 | `tabletime/__init__.py` | Application factory and settings |
-| `tabletime/db.py` | Database connection; `init-db`, `seed`, and `create-admin` commands |
-| `tabletime/schema.sql` | Tables for teams and users |
-| `tabletime/auth.py` | Log in, log out, `login_required` |
-| `tabletime/security.py` | CSRF protection for every form |
-| `tabletime/main.py` | Sends each role to its dashboard |
-| `tabletime/templates/` | Page layout, login form, placeholder dashboards |
+| `tabletime/schema.sql` | The shared tables: `teams`, `users`, `study_sessions` |
+| `tabletime/db.py` | Database connection; the `init-db` and `seed` commands |
+| `tabletime/dev.py` | The development-only "Acting as" menu, which sets `g.user` |
+| `tabletime/tokens.py` | Signed QR tokens with an expiry: `make_token()` and `check_token()` |
+| `tabletime/times.py` | UTC text in the database, local time on the page |
+| `tabletime/templates/` | The page layout and the welcome page |
 | `tabletime/static/style.css` | Mobile-first styles |
-| `labs/week05_race/` | The week 5 lab on race conditions |
-| `tests/` | Tests for the starter, plus skipped tests for weeks 2 and 3 |
+| `tests/` | Tests for the shared code |
 
-Comments that start with `Week N:` mark where that week's work goes.
+Changes to the shared files affect everyone, so they go through a pull
+request that the whole group agrees on.
+
+### The current user
+
+Your routes read the current user from `g.user` (a row from `users`, or
+`None`): `g.user["id"]`, `g.user["role"]`, `g.user["team_id"]`. For now the
+"Acting as" menu sets it. When logins are added, a login sets it instead and
+the menu goes away, so code that reads `g.user` keeps working.
+
+### Times
+
+Every time in the database is UTC text such as `2027-02-15T23:05:00Z`. Use
+`times.now_text()` to store the current time, and the `local_time` filter to
+show a time on a page: `{{ s["clock_in"] | local_time }}`.
 
 ## Settings
 
 Put settings in `instance/config.py` (not committed), or in environment
 variables that start with `TABLETIME_`. Before running anywhere other than
-your own laptop, set a long random secret key:
+your own laptop, set a long random secret key, since it signs the QR codes:
 
 ```bash
 export TABLETIME_SECRET_KEY="$(python -c 'import secrets; print(secrets.token_hex(32))')"

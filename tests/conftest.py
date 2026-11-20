@@ -11,12 +11,21 @@ PASSWORD = "password"
 
 
 @pytest.fixture
-def app():
+def empty_app():
+    """An app with empty tables."""
     db_fd, db_path = tempfile.mkstemp()
     app = create_app({"TESTING": True, "DATABASE": db_path, "SECRET_KEY": "test"})
-
     with app.app_context():
         init_db()
+    yield app
+    os.close(db_fd)
+    os.unlink(db_path)
+
+
+@pytest.fixture
+def app(empty_app):
+    """An app with two teams, one admin, one coach and two athletes."""
+    with empty_app.app_context():
         db = get_db()
         db.execute("INSERT INTO teams (name) VALUES ('Soccer'), ('Swimming')")  # ids 1 and 2
         add_user(db, email="admin@example.edu", name="Ada Admin", password=PASSWORD, role="admin")
@@ -27,11 +36,7 @@ def app():
         add_user(db, email="swimmer@example.edu", name="Sam Swimmer", password=PASSWORD,
                  role="athlete", student_id="1000002", team_id=2)
         db.commit()
-
-    yield app
-
-    os.close(db_fd)
-    os.unlink(db_path)
+    return empty_app
 
 
 @pytest.fixture
@@ -44,24 +49,12 @@ def runner(app):
     return app.test_cli_runner()
 
 
-class Forms:
-    """Submit forms the way a browser would, including the CSRF token."""
-
-    def __init__(self, client):
-        self._client = client
-
-    def post(self, url, data=None, **kwargs):
-        with self._client.session_transaction() as sess:
-            token = sess.setdefault("csrf_token", "test-csrf-token")
-        return self._client.post(url, data={**(data or {}), "csrf_token": token}, **kwargs)
-
-    def login(self, email="athlete@example.edu", password=PASSWORD):
-        return self.post("/auth/login", {"email": email, "password": password})
-
-    def logout(self):
-        return self.post("/auth/logout")
-
-
 @pytest.fixture
-def forms(client):
-    return Forms(client)
+def act_as(app, client):
+    """Pick a user from the Acting as menu, by email: act_as("coach@example.edu")."""
+    def pick(email):
+        with app.app_context():
+            user_id = get_db().execute(
+                "SELECT id FROM users WHERE email = ?", (email,)).fetchone()["id"]
+        return client.post("/dev/act-as", data={"user_id": user_id})
+    return pick

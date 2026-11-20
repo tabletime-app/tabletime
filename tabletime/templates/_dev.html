@@ -1,0 +1,12 @@
+{# Development-only helpers. Import with:
+     {% from "_dev.html" import dev_scan_link %}
+   and use {{ dev_scan_link(scan_url) }} on the display page. #}
+
+{% macro dev_scan_link(url) %}
+{% if config.DEBUG or config.TESTING %}
+<p class="dev-only">
+  Development only: <a href="{{ url }}">open this code's scan link in the browser</a>,
+  so you can test clocking in without a phone.
+</p>
+{% endif %}
+{% endmacro %}

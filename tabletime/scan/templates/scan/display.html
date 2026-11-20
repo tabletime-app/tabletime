@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% from "_dev.html" import dev_scan_link %}
+{% block title %}Study table display{% endblock %}
+{% block content %}
+<h1>Scan to clock in or out</h1>
+<p class="todo">Display and scan: show a QR code here that holds the scan URL for a fresh token,
+and fetch a new one every QR_REFRESH_SECONDS. Your Spec 1 mockup is the starting point.
+Put <code>dev_scan_link(scan_url)</code> under the code so you can test without a phone.</p>
+{% endblock %}

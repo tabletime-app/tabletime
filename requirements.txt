@@ -1,3 +1,4 @@
 flask>=3.0
-qrcode>=7.4     # used from week 6
+qrcode>=7.4     # draws the QR code as SVG
+tzdata          # time zone data, needed on Windows
 pytest>=8.0

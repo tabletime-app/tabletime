@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}Welcome{% endblock %}
+{% block content %}
+<h1>TableTime</h1>
+<p>TableTime tracks study table hours for student athletes.</p>
+{% if acting_as_users %}
+<p>Pick a user from the <strong>Acting as</strong> menu above to see TableTime as that person.
+Until logins are added, this menu stands in for logging in.</p>
+{% else %}
+<p>There are no users yet. Run <code>flask --app tabletime seed</code> to add fake teams, coaches and athletes.</p>
+{% endif %}
+{% endblock %}

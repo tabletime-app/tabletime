@@ -1,19 +1,13 @@
-"""Pages that aren't about logging in."""
-from flask import Blueprint, g, render_template
-
-from .auth import login_required
+"""The home page, which sends each user to the home page for their role."""
+from flask import Blueprint, g, redirect, render_template, url_for
 
 bp = Blueprint("main", __name__)
 
-DASHBOARDS = {
-    "athlete": "dashboards/athlete.html",
-    "coach": "dashboards/coach.html",
-    "admin": "dashboards/admin.html",
-}
+HOMES = {"athlete": "athlete.home", "coach": "coach.home", "admin": "admin.home"}
 
 
 @bp.route("/")
-@login_required
 def index():
-    """Each role lands on its own dashboard. Weeks 9 to 12 fill these in."""
-    return render_template(DASHBOARDS[g.user["role"]])
+    if g.user is None:
+        return render_template("welcome.html")
+    return redirect(url_for(HOMES[g.user["role"]]))
