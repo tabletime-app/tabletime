@@ -35,7 +35,9 @@ def test_a_token_from_the_future_is_refused(app):
 def test_a_changed_token_is_refused(app):
     with app.app_context():
         token = make_token(now=NOW)
-        changed = token[:-1] + ("A" if token[-1] != "A" else "B")
+        # Change the first character. (The last character of base64 text can
+        # carry unused bits, so changing it doesn't always change the token.)
+        changed = ("B" if token[0] != "B" else "C") + token[1:]
         with pytest.raises(BadToken):
             check_token(changed, now=NOW)
 
