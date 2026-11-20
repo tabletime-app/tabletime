@@ -1,7 +1,8 @@
 from collections import Counter
-from datetime import datetime
+from datetime import datetime, timezone
 
-from tabletime.db import ATHLETES_PER_TEAM, TEAMS, get_db
+from tabletime import times
+from tabletime.db import ATHLETES_PER_TEAM, SEED_WEEKS, TEAMS, get_db
 from tabletime.times import FORMAT, from_text
 
 
@@ -46,11 +47,36 @@ def test_seeded_sessions_are_well_formed(empty_app):
 def test_seeded_hours_vary_around_six_a_week(empty_app):
     run_seed(empty_app)
     with empty_app.app_context():
+        this_week, _ = times.week_bounds()
         weekly = get_db().execute("""
             SELECT user_id,
-                   SUM((julianday(clock_out) - julianday(clock_in)) * 24) / 10.0 AS hours
-            FROM study_sessions WHERE clock_out IS NOT NULL
-            GROUP BY user_id""").fetchall()
+                   SUM((julianday(clock_out) - julianday(clock_in)) * 24) / ? AS hours
+            FROM study_sessions WHERE clock_out IS NOT NULL AND clock_in < ?
+            GROUP BY user_id""", (SEED_WEEKS, this_week)).fetchall()
     hours = [r["hours"] for r in weekly]
     assert min(hours) < 4 and max(hours) > 7.5
     assert any(5 <= h <= 7 for h in hours)
+
+
+def test_this_week_has_sessions_but_none_in_the_future(empty_app, freeze_time):
+    # Thursday evening in Central time, so this week has had several evenings.
+    now = freeze_time(datetime(2027, 2, 19, 2, 0, tzinfo=timezone.utc))
+    run_seed(empty_app)
+    with empty_app.app_context():
+        db = get_db()
+        start, _ = times.week_bounds()
+        this_week = db.execute(
+            "SELECT COUNT(*) FROM study_sessions WHERE clock_in >= ?", (start,)).fetchone()[0]
+        latest = db.execute("SELECT MAX(clock_in) FROM study_sessions").fetchone()[0]
+        latest_out = db.execute("SELECT MAX(clock_out) FROM study_sessions").fetchone()[0]
+    assert this_week > 20
+    assert from_text(latest) <= now and from_text(latest_out) <= now
+
+
+def test_seed_calls_each_parts_seed_function(empty_app, monkeypatch):
+    import tabletime.admin
+    calls = []
+    monkeypatch.setattr(tabletime.admin, "seed", lambda db: calls.append(db), raising=False)
+    result = run_seed(empty_app)
+    assert len(calls) == 1
+    assert "Ran the admin part's seed function." in result.output

@@ -53,7 +53,8 @@ def create_app(test_config=None):
     app.register_blueprint(coach_bp)
     app.register_blueprint(admin_bp)
 
-    from .times import local_time
+    from .times import local_time, to_form
     app.jinja_env.filters["local_time"] = local_time
+    app.jinja_env.filters["to_form"] = to_form
 
     return app

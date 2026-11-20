@@ -58,3 +58,19 @@ def act_as(app, client):
                 "SELECT id FROM users WHERE email = ?", (email,)).fetchone()["id"]
         return client.post("/dev/act-as", data={"user_id": user_id})
     return pick
+
+
+@pytest.fixture
+def freeze_time(monkeypatch):
+    """Fix the app's clock: freeze_time(datetime(2027, 2, 15, 23, 0, tzinfo=timezone.utc)).
+
+    This replaces tabletime.times.utc_now, so now_text(), week_bounds() and
+    any code that calls times.utc_now() see that moment. QR tokens are
+    different: make_token() and check_token() read the system clock, so pass
+    them the time explicitly, for example make_token(now=moment.timestamp())
+    and check_token(token, now=moment.timestamp()).
+    """
+    def freeze(moment):
+        monkeypatch.setattr("tabletime.times.utc_now", lambda: moment)
+        return moment
+    return freeze

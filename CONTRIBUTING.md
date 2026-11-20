@@ -22,15 +22,26 @@ agrees on.
 
 Your group's repository is a copy of a class repository, and a remote named
 `upstream` points at it. When the instructor adds something to the class
-repository, bring it into yours:
+repository, bring it into yours on a branch and open a pull request, the same
+as any other change. (Branch protection on `main` refuses a direct push, even
+of a merge.)
 
 ```bash
 git switch main
-git pull                      # your group's latest main
-git fetch upstream
-git merge upstream/main       # resolve any conflicts, run pytest, then commit
-git push
+git pull                          # start from your group's latest main
+git fetch upstream                # download the class repository's commits
+git switch -c merge-upstream      # a branch for the merge
+git merge upstream/main           # resolve any conflicts, then commit
+pytest
+git push -u origin merge-upstream
 ```
+
+Then open a pull request from `merge-upstream`, and have another member review
+and approve it. Once it is merged, each member runs `git switch main` and
+`git pull`, then `git merge main` on each branch they are still working on.
+
+If `git remote -v` doesn't list `upstream`, add it once with
+`git remote add upstream <the class repository's address>`.
 
 ## Code style
 

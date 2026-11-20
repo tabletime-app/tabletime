@@ -40,6 +40,22 @@ Every test must pass before a pull request is merged. Add tests for each
 route you write, including at least one test of something that should be
 refused.
 
+Tests that depend on the time of day or the day of the week should fix the
+clock with the `freeze_time` fixture from `tests/conftest.py`:
+
+```python
+from datetime import datetime, timezone
+
+def test_this_weeks_total(client, act_as, freeze_time):
+    freeze_time(datetime(2027, 2, 17, 18, 0, tzinfo=timezone.utc))
+    ...
+```
+
+It replaces `tabletime.times.utc_now()`, so code that gets the time from
+`times.utc_now()`, `times.now_text()` or `times.week_bounds()` sees that
+moment. QR tokens read the system clock instead, so pass them the time:
+`make_token(now=moment.timestamp())` and `check_token(token, now=...)`.
+
 ## How the code is organized
 
 The app has four parts, and each has its own folder with its routes
@@ -52,8 +68,11 @@ The app has four parts, and each has its own folder with its routes
 | `tabletime/coach/` | Coach pages | The roster against the minimum, setting minimums, corrections with an audit trail |
 | `tabletime/admin/` | Admin pages | Teams, coach accounts, open hours |
 
-Each part's tables go in its own `schema.sql`. Shared code that every part
-uses is at the top level:
+Each part's tables go in its own `schema.sql`. To add fake rows to a part's
+tables (open hours, team minimums), define a `seed(db)` function in that
+part's `__init__.py`; `flask --app tabletime seed` calls it after the shared
+teams, users and study sessions exist. Shared code that every part uses is at
+the top level:
 
 | Path | What it does |
 | --- | --- |
@@ -62,7 +81,7 @@ uses is at the top level:
 | `tabletime/db.py` | Database connection; the `init-db` and `seed` commands |
 | `tabletime/dev.py` | The development-only "Acting as" menu, which sets `g.user` |
 | `tabletime/tokens.py` | Signed QR tokens with an expiry: `make_token()` and `check_token()` |
-| `tabletime/times.py` | UTC text in the database, local time on the page |
+| `tabletime/times.py` | The current time (`utc_now()`), week boundaries, form values, and local time on the page |
 | `tabletime/templates/` | The page layout and the welcome page |
 | `tabletime/static/style.css` | Mobile-first styles |
 | `tests/` | Tests for the shared code |
@@ -79,9 +98,20 @@ the menu goes away, so code that reads `g.user` keeps working.
 
 ### Times
 
-Every time in the database is UTC text such as `2027-02-15T23:05:00Z`. Use
-`times.now_text()` to store the current time, and the `local_time` filter to
-show a time on a page: `{{ s["clock_in"] | local_time }}`.
+Every time in the database is UTC text such as `2027-02-15T23:05:00Z`.
+`tabletime/times.py` has what the parts need:
+
+- `times.utc_now()` and `times.now_text()`: the current time. Get it only
+  from here, so tests can fix the clock.
+- `times.week_bounds()`: this study week, Monday 00:00 to the next Monday in
+  local time, as two UTC texts for `clock_in >= ? AND clock_in < ?`.
+- `times.minutes_between(start, end)`: the length of a session in minutes.
+- `times.from_form(value)` and the `to_form` filter: convert between UTC
+  text and an `<input type="datetime-local">` value, which is local time.
+- The `local_time` filter shows a time on a page: `{{ s["clock_in"] | local_time }}`.
+
+Import the module (`from .. import times`) and call `times.utc_now()`, so the
+test clock can replace it.
 
 ## Settings
 

@@ -7,19 +7,24 @@ Timestamps are stored as UTC text in ISO 8601 form, for example
 "2027-02-15T23:05:00Z". Convert to local time only when displaying
 (see tabletime/times.py).
 """
+import importlib
 import random
 import sqlite3
-from datetime import datetime, time, timedelta, timezone
+from datetime import datetime, time, timedelta
 
 import click
 from flask import current_app, g
 from flask.cli import with_appcontext
 from werkzeug.security import generate_password_hash
 
+from . import times
 from .times import local_zone, to_text
 
-# The shared schema runs first, then each part's schema in this order.
-PART_SCHEMAS = ["scan/schema.sql", "athlete/schema.sql", "coach/schema.sql", "admin/schema.sql"]
+# The four parts of the app. init-db runs the shared schema.sql first, then
+# each part's schema.sql in this order, and seed calls each part's seed(db)
+# function, if it has one, after the shared fake data is in place.
+PARTS = ["scan", "athlete", "coach", "admin"]
+PART_SCHEMAS = [f"{part}/schema.sql" for part in PARTS]
 
 
 def get_db():
@@ -81,23 +86,27 @@ WEEKLY_HOURS = [2, 4, 5, 6, 6, 7, 8, 10]
 
 
 def seed_sessions(db, athlete_ids, now=None, rng=None):
-    """Add SEED_WEEKS weeks of fake study sessions, plus a few open ones right now.
+    """Add fake study sessions for the last SEED_WEEKS weeks and this week so far.
 
     Sessions fall on Sunday to Thursday evenings between 6 and 10 pm local
-    time and are stored in UTC. Returns the number of sessions added.
+    time and are stored in UTC. This week only gets sessions that ended at
+    least two hours before now, so the "this week" pages have data. A few
+    athletes also get a session that is open right now. Returns the number
+    of sessions added.
     """
     rng = rng or random.Random(253)
     zone = local_zone()
-    now = now or datetime.now(timezone.utc)
+    now = now or times.utc_now()
     today = now.astimezone(zone).date()
     this_monday = today - timedelta(days=today.weekday())
     first_monday = this_monday - timedelta(weeks=SEED_WEEKS)
+    latest_end = now - timedelta(hours=2)
 
     rows = []
     for user_id in athlete_ids:
         target = rng.choice(WEEKLY_HOURS)
         week = first_monday
-        while week < this_monday:
+        while week <= this_monday:
             goal_minutes = max(0, rng.gauss(target * 60, 45))
             evenings = [week + timedelta(days=d) for d in (0, 1, 2, 3, 6)]
             rng.shuffle(evenings)
@@ -109,6 +118,8 @@ def seed_sessions(db, athlete_ids, now=None, rng=None):
                 start = datetime.combine(day, time(18, 0), zone) + timedelta(
                     minutes=rng.randrange(0, 120, 5))
                 end = start + timedelta(minutes=length)
+                if end > latest_end:
+                    continue  # this week's sessions stop before now
                 rows.append((user_id, to_text(start), to_text(end)))
                 done += length
             week += timedelta(weeks=1)
@@ -147,9 +158,28 @@ def seed_command():
                 role="athlete", student_id=f"10000{n}", team_id=team_id))
 
     sessions = seed_sessions(db, athlete_ids)
+    seeded_parts = seed_parts(db)
     db.commit()
     click.echo(f"Added {len(TEAMS)} teams, {len(TEAMS) + 1 + len(athlete_ids)} users "
                f"and {sessions} study sessions.")
+    for part in seeded_parts:
+        click.echo(f"Ran the {part} part's seed function.")
+
+
+def seed_parts(db):
+    """Call seed(db) in each part's package, if the part defines one.
+
+    A part adds fake rows for its own tables this way, for example the
+    admin part's open hours or the coach part's team minimums, once the
+    shared teams and users exist. Returns the names of the parts that ran.
+    """
+    ran = []
+    for part in PARTS:
+        module = importlib.import_module(f"tabletime.{part}")
+        if hasattr(module, "seed"):
+            module.seed(db)
+            ran.append(part)
+    return ran
 
 
 def init_app(app):
