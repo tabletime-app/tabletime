@@ -1,0 +1,75 @@
+/* Small, readable defaults that work on a phone first. */
+:root {
+  --ink: #1d1d1f;
+  --quiet: #5f6368;
+  --line: #d7d9dc;
+  --accent: #1a5fb4;
+  --good: #1e7b34;
+  --bad: #b3261e;
+  --page: #ffffff;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 1rem;
+  line-height: 1.5;
+  color: var(--ink);
+  background: var(--page);
+}
+
+.site-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.brand { font-weight: 700; color: var(--ink); text-decoration: none; }
+.who { margin-right: 0.75rem; }
+.role { color: var(--quiet); font-size: 0.875rem; }
+
+main { max-width: 40rem; margin: 0 auto; padding: 1rem; }
+
+a { color: var(--accent); }
+
+.stack { display: grid; gap: 0.5rem; max-width: 24rem; }
+label { font-weight: 600; margin-top: 0.5rem; }
+
+input, select, button {
+  font: inherit;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+
+button {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+  cursor: pointer;
+  margin-top: 0.75rem;
+}
+
+form.inline { display: inline; }
+button.link {
+  background: none;
+  border: none;
+  color: var(--accent);
+  padding: 0;
+  margin: 0;
+  text-decoration: underline;
+}
+
+.flash { padding: 0.6rem 0.75rem; border-radius: 6px; border: 1px solid var(--line); }
+.flash.error { border-color: var(--bad); color: var(--bad); }
+.flash.success { border-color: var(--good); color: var(--good); }
+
+.todo { color: var(--quiet); border-left: 3px solid var(--line); padding-left: 0.75rem; }
+
+table { width: 100%; border-collapse: collapse; }
+th, td { text-align: left; padding: 0.5rem; border-bottom: 1px solid var(--line); }

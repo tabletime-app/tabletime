@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}Log in{% endblock %}
+{% block content %}
+<h1>Log in</h1>
+<form method="post" class="stack">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  {% if next_url %}<input type="hidden" name="next" value="{{ next_url }}">{% endif %}
+
+  <label for="email">Email</label>
+  <input id="email" name="email" type="email" autocomplete="username" required
+         value="{{ request.form.get('email', '') }}">
+
+  <label for="password">Password</label>
+  <input id="password" name="password" type="password" autocomplete="current-password" required>
+
+  <button type="submit">Log in</button>
+</form>
+{# Week 2: link to the registration page here. #}
+{% endblock %}
