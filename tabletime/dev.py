@@ -36,8 +36,12 @@ def load_acting_user():
 
 @bp.app_context_processor
 def acting_as_choices():
-    """Give base.html the list of users for the menu."""
-    if not menu_enabled():
+    """Give base.html the list of users for the menu.
+
+    The list is left out of pages in tests, because it names every user, and
+    a test that checks a name is NOT on a page would always fail.
+    """
+    if not menu_enabled() or current_app.testing:
         return {"acting_as_users": []}
     users = get_db().execute(
         "SELECT users.id, users.name, users.role, teams.name AS team"

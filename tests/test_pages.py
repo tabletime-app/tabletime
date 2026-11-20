@@ -3,10 +3,12 @@ from flask import g
 from tabletime.times import local_time
 
 
-def test_home_without_a_user_shows_the_welcome_page(client):
+def test_home_without_a_user_shows_the_welcome_page(app, client):
+    app.config["TESTING"] = False  # the menu is hidden in tests; show it here
     response = client.get("/")
     assert response.status_code == 200
     assert b"Acting as" in response.data
+    assert b"Cal Coach (coach, Soccer)" in response.data
 
 
 def test_acting_as_sets_the_user(client, act_as):
@@ -37,6 +39,7 @@ def test_picking_nobody_clears_the_user(client, act_as):
 
 def test_the_menu_can_be_turned_off(app, client, act_as):
     app.config["ACTING_AS_MENU"] = False
+    app.config["TESTING"] = False
     assert client.post("/dev/act-as", data={"user_id": 1}).status_code == 404
     assert b"Acting as" not in client.get("/").data
 
