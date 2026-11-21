@@ -20,13 +20,15 @@ def test_acting_as_sets_the_user(client, act_as):
 
 
 def test_home_sends_each_role_to_its_page(client, act_as):
-    for email, page, heading in [("athlete@example.edu", "/athlete/", b"My study hours"),
-                                 ("coach@example.edu", "/coach/", b"Team hours"),
-                                 ("admin@example.edu", "/admin/", b"Administration")]:
+    # Checks the redirect and that the page loads, not the page's words, so a
+    # group can replace a placeholder page with its own design.
+    for email, page in [("athlete@example.edu", "/athlete/"),
+                        ("coach@example.edu", "/coach/"),
+                        ("admin@example.edu", "/admin/")]:
         act_as(email)
         response = client.get("/")
         assert response.headers["Location"] == page
-        assert heading in client.get(page).data
+        assert client.get(page).status_code == 200
 
 
 def test_picking_nobody_clears_the_user(client, act_as):

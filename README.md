@@ -16,8 +16,11 @@ helper for signed QR codes, with the features themselves left to build.
 You need Python 3.10 or newer.
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate          # Windows: .venv\Scripts\activate
+python3 -m venv venv
+source venv/bin/activate
+# In Git Bash on Windows, use these two lines instead:
+#   python -m venv venv
+#   source venv/Scripts/activate
 pip install -r requirements.txt
 
 flask --app tabletime init-db     # create empty tables
@@ -38,7 +41,9 @@ pytest
 
 Every test must pass before a pull request is merged. Add tests for each
 route you write, including at least one test of something that should be
-refused.
+refused. Put your part's tests in a file of its own, `tests/test_<part>.py`
+(for example `tests/test_coach.py`). Don't add them to `tests/test_pages.py`:
+that file belongs to the shared code, and the shared login rewrites it.
 
 Tests that depend on the time of day or the day of the week should fix the
 clock with the `freeze_time` fixture from `tests/conftest.py`:
